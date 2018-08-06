@@ -1,0 +1,266 @@
+Advanced Apache Spark Training - Sameer Farooqui (Databricks)
+-------------------------------------------------------------
+https://www.youtube.com/watch?v=7ooZ4S7Ay6Y
+
+1. spark streaming => feat(2011) => 6 million records processed in sub second (100 node cluster)
+2. BlinkDB => feat(2012) => 17 TB data + 100 node AWS EC2 cluster => any query in 2 seconds
+	=> param => finish in 5 seconds (systems chooses the confidence in answer like 95%)
+	=> param => finish with 98% accuracy (system takes as much time to get that confident answer)
+3. Tacheyon => memory based distributed storage system shares data across hadoop,spark,etc
+4. Mesos => mediator
+5. Spark => sparks an ecosystem of applications on mesos
+6. Files systems => HDFS, AWS s3, open stack swift, local ext3 or ext4
+7. Anything has hadoop input format => spark can read that form of data
+8. flume and kafka => can be buffers for spark streaming
+9. distributions => CDH, HDP, MapR, DSE (data stax), etc
+10. spark motivation => no multiple technologies, only one unified technology
+11. spark code (370k lines) => 76% scala, 7% java, 9% python, 8% others
+12. mahout => ml k-means example => for 5mb data => 17 MR pipeline jobs are needed.
+13. CPU read from RAM => 10 GB/s
+	CPU read from SSD => 600 MB/s (0.1 ms for random access); cost $0.05 per GB
+	CPU read from HDD => 100 MB/s (3 to 12 ms for random access; $0.45 per GB
+	CPU read from NETWORK => 125 MB/s; NODE in same RACK (1 GB/s)
+	CPU read from NETWORK => 12 MB/s; NODE in other RACK (0.1 GB/s); jump between switches
+14. RDD => has partitions => they can be in 1000 to 10k, that is normal
+	=> if you got a 100 node cluster and without minimum 100 partitions, you cant feel the speed.
+15. RDD can be made by parallelize method or read from source
+		=> parallelize wont be used in production as it need the entire list on the driver machine RAM
+16. firstRDD -> secondRDD -> thirdRDD :: the partitions count is same
+		=> use coalesce func() to remove empty partitions and gather the partitions
+17. collect() => careful to call on TB of data => as u get out of memory error
+	=> usually driver JVM has 1 or 2 GB of heap and its sufficient for normal activities
+18. count() => works at partition level and displays the aggregate value
+19. 100s or RDDs can be there in a lineage; its normal
+20. Dont CACHE every RDD, ignore the RAW/BASIC RDDs, only choose the once which are formatted and cleaned or reusable
+21. if you got 100 partitions in RDD and the cluster RAM can hold only 30 partitions
+	then, remaining 70 will be there on DISK. if an lineage RDD need to be computed, the cluster reads from both RAM and HDD
+	to compute the next RDD (RAM + DISK combo)
+22. its still OK if only 10% fits in RAM for the RDD, its better than mapreduce.
+23. CACHE is also lazy execution; only when the RDD is materialized based on DAG then only at that point, it will cache
+24. TASK => every task is done on a partition
+25. TIP => to get more info about a transformation function without spending lot of time on docs
+	go to github for scala source code and read the 2 line comment for it.
+26. mostly TRANSFORMATIONS are element wise type, but there are transformation which work on per partition
+27. nearly 20 types of RDDs are there, pls have awarnes on the RDD types (kind of data types)
+28.  RDD INTERFACE => 5 functions in common across all RDDs
+	1. set of paritions(splits)
+	2. list of dependencies on parent RDDs
+	3. function to compute a partition given parents
+	4. optional preferred locations (like this data node on hdfs)
+	5. optional partitioning info for k/v RDDs (partitioner) [hash partitioner or custom partitioner]
+29. Regarding preferred location, each partition on the machine preferred to stay there if is has a hdfs replica block
+	on the same machine
+30. example Hadoop RDD:
+	1. parititions = one per hdfs block
+	2. dependencies = none
+	3. compute (partition) = means = read corresponding block
+	4. preffered locations (part) = HDFS block location
+	5. partition = none (as this does need a hash/custom partitioner, no such calculation is taking place here)
+31. example Filtered RDD:
+	1. partitions = same as parent RDD
+	2. dependencies = one-to-one on parent
+	3. compute(partition) = compute parent and filter it
+	4. preferred locations = none (ask parent); usually same node as parent partition
+	5. partitioner = none
+32. example JOINED RDD
+	1. partitions = one per reduce task ; (kind of one output per reduce task)
+	2. dependencies = "shuffle" on each parent
+	3. compute (partition) = read and join shuffled data
+	4. preferred locations (part) = none
+	5. partitioner = hash partitioner (numTasks)
+33. cassandra RDD => connect by c* connector
+	by default each partition will get 100k row; so pls modify that before using
+	cassandra.input.split.size parameter; to be used
+	cassandra rdd has special methods, like select() and where() on table
+34. hbase and parquet might have special methods, but i am not aware ***
+35. simple things should be simple, complex things should be possible - Alan Kay (data bricks)
+36. below partitions are not related to RDDs. They are related to cluster, like a job can start with 10 executors
+		and increase dynamically to 20 while running and can come back to 10.
+	Static Partitioning => Local and Standalone Schedular
+	Dynamic Partitioning => YARN and MESOS
+37. in MapReduce => parallelism is acheived with multiple processes (process ids)
+	in spark => parallelism is acheived with multiple threads (thread ids)
+	spark => executor => slots => tasks
+38. in MapReduce (hadoop1) => the map and reduce slots are fixed. so in the begining half of the cluster is unused 
+		as they are allocated to reduce tasks, while map tasks are in waiting mode.
+39. launch a jvm => 1 sec; tear down jvm => 0.5 sec ; 1500 milli seconds is too costly
+	spark does this very fast
+40. spark actually calls SLOTS as CORES.
+41. Local Mode:
+	one machine => executor + driver in same machine
+	set num cores = 6 ; all 6 can run in one executor;
+	if got 12 paritions; then first 6 then 6 will execute
+42. beginners mistake => if you got a 8 core machine, you may think of giving 6 to spark and 2 to your os.
+	but u need to use a factor of 2 or 3 ; i.e 12 or 18 cores for those 6 cores
+	as these are using threads
+43. no of cores => info can be passed to the system in 3 ways
+	local 		==> defaults to 1
+	local[N]	==> N cores; this is best way as we suggest;
+	local[*]	==> use as many as possible (logical processor => thread)
+	ex: ./bin/spark-shell --master local[12]
+	ex: ./bin/spark-shell --master local[12] --name "MyFirstApp" myApp.jar
+44. shuffle is local mode is very fast as there are no more machines (only 1)
+45. Spark Standalone Mode:
+	ex: ./bin/spark-shell --master spark://host11:port11
+		--name "MyFirstApp" myApp.jar
+	spark-env.sh file => SPARK_LOC_DIRS ; has the paths to the mounted storage disks
+	this property is used in the event to spill the data on disk (paths are taken from here)
+	when we persist and RDD with (RAM + DISK) combo, what ever is left over spill to disk
+	Map output spills also goes to the same location
+	JOBD is better than RAID configuration for spark
+	when we start the spark cluster:
+	master jvm => spark master (a schedular); restarts a worker jvm when crashes 
+	worker jvm => just starts an executer jvms; if executor crashes, worker jvm start one more
+	when we submit the job:
+	driver jvm => can also be restarted by master jvm (high available); but then all the executors also to be started
+	executer jvm => launched on each machine (default); rdd cached here; tasks run here
+	if any machine has higher configuration => then, we can run more executors there with a spark property
+	spark-env.sh => SPARK_WORKER_CORES
+	spark-master => can be made highly available, using zookeeper
+	in datastax, distribution they made spark-master highly available without zookeeper; its done with a cassandra table
+	TIP => you are not supposed to give more than 45 GB of ram allocation to JVM as the Garbage collector fails there
+	one worker jvm => can start one executor for app1
+	one worker jvm => CANNOT start 2 executor for app1
+	one worker jvm => can start one executor for app1 and another executor for app2
+	2 worker jvm => needed => to start 2 executors for same app (ex: app1)
+	properties:
+	SPARK_WORKER_INSTANCES => default(1); how many worker jvm will be on each machine
+	SPARK_WORKER_CORES => how many cores a worker jvm can give to an executor; if 6 means, for every executor will get 6
+	SPARK_WORKER_MEMORY => how much memory given to underlying executors
+	SPARK_DEAMON_MEMORY => memory for master jvm and worker jvm (ex: 1 GB for each)
+46. Standalone Mode settings:
+	apps submitted will run in FIFO mode by default
+	spark.cores.max => maximum amount of cpu cores to request for the application from across the cluster 
+		(internally spark tries to balance the cores across the executors, but we cant define that)
+	spark.executor.memory => memory for each executor
+	You cannot define the number of executors (sounds simllar to number of mappers in hadoop)
+47. job => made of one or more stages
+	stages => made of one or more tasks
+48. caching can be done on RAM or HDD or HEAP (using tacheyon)
+49. when u de-serialize the data => file(100mb) to object(300mb) =>  2 to 3 times more space it takes
+50. Spark on YARN; 2 ways ; client mode ; cluster mode
+	spark-shell => client mode => driver in client (like shell)
+	spark-submit => cluster mode
+	container => has => executor
+	driver => scheduler the tasks to run on which executor [this is new]
+	an executor can start any where; it doesn't check data locality; be aware (its not like mapreduce)
+	if you disconnect the laptop(client machine) and go home => your spark app crashes as driver not there.
+	for those reasons we have spark-submit (which is non-interactive)
+	in spark-submit; driver will be launched in application-master
+	here:
+		u can set --number of executors
+					--executor-memory and --executor-cores
+		dynamic allocation properties are also there; refer the slides
+	ex: shell is also client mode
+		$ spark-submit --class a.b.c.classname 
+			--deploy-mode client
+			--master yarn
+			/path/to/spark/jar/x.jar 10
+
+		$ spark-submit --class a.b.c.classname 
+			--deploy-mode cluster
+			--master yarn
+			/path/to/spark/jar/x.jar 10
+51. in summary:
+
+				Spark Central Master		Who Starts Executors?		Tasks run in
+	Local		[none]						Human-Being					Executor
+	Standalone	Standalone-Master			Worker-JVM					Executor
+	YARN		Application-Master			Node-Manager				Executor
+	Mesos		Mesos-Master				Mesos-Slave					Executor
+	
+	pls check in google: "possible values for the --master flag in spark-submit"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
