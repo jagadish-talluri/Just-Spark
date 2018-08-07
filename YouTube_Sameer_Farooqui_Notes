@@ -170,14 +170,106 @@ https://www.youtube.com/watch?v=7ooZ4S7Ay6Y
 	Mesos		Mesos-Master				Mesos-Slave					Executor
 	
 	pls check in google: "possible values for the --master flag in spark-submit"
-
-
-
-
-
-
-
-
+52. Few Thumb Rules => dont take them serioulsy
+	Use 75% of machines RAM for spark
+	executor heap size, min 8gb max 40gb, watch Garbage collector
+	NOTE: memory usage is greatly affected by storage level and serialization format
+	NOTE: if you use a proprietory JVM then it can handle 100 gb RAM as it has proper GC (garbage collector)
+53. Persist and RDD; memory vs memory+disk
+		RDD.cache() == RDD.persist(MEMORY_ONLY)
+		RDD.cache() is a short cut to RDD.persist(<pass-param>)
+		if no space on memory, the partitions wont fit will be dropped (they will be recomputed on the fly from lineage)
+		partition drop is automic; so partial partition drop wont happen.
+		RDD is stored in RAM as deserialized object
+		NOTE: you cant pin an RDD in cache as permament, like no matter what it need to be in cache; not possible
+			right now(2015) we can explicitly tell the cache to hold this RDD permanently.
+			most recently cached RDDs will flush old RDDs in cache based on the need
+54. RDD.persist(MEMORY_ONLY_SER)
+	this is more space efficient.but little bit slow.
+	kryo serialization is more faster than java serialization; we recommend kryo
+	entire serialized buffer will be stored in one place
+55. RDD.persist(MEMORY_AND_DISK)
+	deserialized => on ram
+	serialized => on disk
+56. RDD.persist(MEMORY_AND_DISK_SER)
+	serialized => on ram
+	serialized => on disk
+	NOTE: it is always serialized when it spills down to disk.
+	These spills are per executor basis not par partition basis.
+57. RDD.persist(DISK_ONLY)
+	stores the RDD on the local_dirs (disk)
+58. RDD.persist(MEMORY_ONLY_2)
+	stores as de-serialized java objects in 2 different JVMs(2 nodes)
+	in general, you will have only 1 copy of RDD available in cache; (not like hdfs replica)
+	it is suggested to have on	ly one copy also.
+59. RDD.persist(MEMORY_AND_DISK_2)
+	same as MEMORY_ONLY_2 but spills to disk(disks on both machines) when memory is full.
+60. RDD.persist(OFF_HEAP) => serialized object stored on Tachyon
+	NOTE: the beauty of this is the RDD which got cached in Tachyon can be used by any language
+		scala,python,java; it is inter-operable
+	Tachyon, mostly will be installed in all executor nodes.
+61. Tachyon == now called as Alluxio; open source only
+62. RDD.unpersist() => we can UNPERSIST and RDD forcefully.
+63. Which persistence to choose?
+	- if RDD fits in memory, choose MEMORY_ONLY
+	- if not, use MEMORY_ONLY_SER (with fast serialization library)
+	- dont spill to disk unless functions that computed the datasets are very expensive
+		or they filter a large amount of data.
+		(most of the time recomputing may be as fast as reading from disk)
+	- dont use replicated storage levels (MEMORY_ONLY_2 and MEMORY_AND_DISK_2)
+		use them sparingly, only if you want fast fault recovery (may be to serve request from webapp)
+64. NOTE: when ever shuffle happens. THE RDD is PERSISTED AUTOMATICALLY.
+	so even if you have 200 transformations and no RDD is cached, still he system looks at DAG
+		for the closest shuffle stage to get the cached RDD. (it stores in local_dirs)
+65. With PySpark: stored objects will always be serialized with pickle library. 
+	so it doesn't matter whether you choose a serialized level. (always serialized, it ignore the memory setting)
+66. usually: 100% memory(RAM) in spark executor jvm is
+		60% cached RDDs (spark.storage.memoryFraction)
+		20% shuffle memory (spark.shuffle.memoryFraction)
+		20% user programs (what ever is left after the above 2 properties, will be taken by user programs)
+67. how to check memory consumption for an rdd?
+	1. create and RDD
+	2. put it into cache
+	3. check SparkContext logs on the driver program of Spark UI
+	NOTE: logs will tell you how much memory each partition is consuming, which you can aggregate to get the total
+			size of the RDD
+	ex: Added rdd_0_1 in memory on .. (size: 717 kb, free: 300 mb)
+		rdd_0's partition 1's size is 717 kb
+68. Where serialization used on spark?
+	1. Transferring data over the newtork
+	2. Spilling data to disk
+	3. Caching to memory serialized
+	4. Broadcasting Variables
+	NOTE: it is highly recommended in production to use KRYO serialization as java's is slow
+	conf.set("spark_serializer","org.apache.spark.serializer.KryoSerializer")
+69. cost of garbage collection is directly proportional to number of java objects
+70. we can measure GC with few parameters when starting the JVM, check the slide for property names
+	GC types:
+	1. Parallel GC -> good for batch spark jobs
+	2. Prallel OLD GC
+	3. CMS GC
+	4. G1 GC -> good for all
+	(check slides for setting commands)
+71. Every Spark Job => Has Stages => stages can be parallel or ordered => Stages has Tasks => Task does on a PARTITION
+72. Check slide => scheduling process => very good
+		=> command
+		=> DAG (RDD objects lineage)
+		=> Stages made of tasks to run on specified partitions (DAG scheduler)
+		=> Launches individual tasks (Task Scheduler)
+		=> Executes Tasks (Executor)
+73. Lineage Dependencies [check slide]
+		=> Narrow Dependencies 
+			(parent partition can have atmost 1 child partition; tasks can happen parallely;
+				ex: map, filter, union, join with inputs co-partitioned)
+		=> Wide Dependencies
+			(parent partition can have more than 1 child partition; tasks CANNOT happen parallely;
+				ex: groupByKey, join with inputs not co-partitioned)
+			NOTE: wide operations are very costly and involves shuffle, its best to cache the result RDDs
+				with MEMORY_AND_DISK option.
+74. Re-Partition => we can ask the system to make N number of partitions for and RDD.
+	NOTE: dont inherit number of partitions from parent RDD; its done by default
+75. RDD.toDebugString => we can do debugging well
+76. STAGES => amazing slide => talks about stage boundaries (3:33 time line on video)
 
 
 
