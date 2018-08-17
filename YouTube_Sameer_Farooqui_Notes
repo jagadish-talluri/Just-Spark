@@ -270,10 +270,55 @@ https://www.youtube.com/watch?v=7ooZ4S7Ay6Y
 	NOTE: dont inherit number of partitions from parent RDD; its done by default
 75. RDD.toDebugString => we can do debugging well
 76. STAGES => amazing slide => talks about stage boundaries (3:33 time line on video)
-
-
-
-
+77. in STAGES, assuming if you are doing 3 operations on an RDD like get, map, filter:
+	=> system wont use 3 threads to do that. 
+	=> as it is a narrow dependency. system makes it to run with a single thread.
+	=> so for a line, we get it, we map it, we filter it => at a stretch in a stage
+78. STAGES show how it runs technically in the back ground.
+	=> every stage is a set of actions happen in a stretch
+	=> example at 3:36 => B is there for us to understand but in background F directly gets file from A
+79. You can debug an RDD by the toDebugString() method
+	ex: inputRDD.toDebugString()
+80. How do you know when a shuffle is going to happen on your RDD?
+	=> shuffles are costly, so remember not to over do it
+	=> shuffle RDD comes out of shuffle transformation; that's the way to locate
+	=> repartition, join, cogroup and any of the "by" or "byKey" transformations can cause them
+	=> explicit declaration of numPartitions parameter
+	=> repartition method calls coalese with true condition, that triggers shuffle
+	=> call repartition if you want to increase the partitions
+	=> call coalesce if you want to decrease the partitions (fast as no shuffle here)
+81. when do you call repartition when the rdd has 2 partitions and output is also 2 partitions?
+	=> if the data is not well load balanced, to balance the data
+82. PRESERVES PARTITIONING (3:44:44)
+	=> RDDs with key-value pairs; if your logic is only going to transform the values and keep the keys intact
+	=> then, you can tell explicitly PRESERVES PARTITIONING; so that the same partitions give to the keys will go to child RDD
+83. Spark Tuning => Cloudera Blog
+84. We have just 30 Tranformations in SPARK. Very Few.
+85. NOTE: it is always good to keep all your transformations in one pipeline if possible.
+	=> spark can handle thousands of transformations in one DAG; (unlike hadoop)
+	=> only when you change the programming language or API => then you can keep those transformations in another application
+86. BROADCAST VARIABLES:
+	=> just like hadoop distributed cache => stores small data set in memory as hash table
+	=> anothe benefit is we can pass the program only once even though the worker has many threads. all copy from that program.
+	=> hadoop sends data to local file system
+	=> spark sends data to executor JVM
+	=> val bc = sc.broadcast(Array(1,2,3)); broadcast.value
+87. Efficient BroadCast algorithm:
+	=> Blog: orchestra is the default broadcast mechanism in apache spark - Mosharat Chowdhury
+	=> old technique: 20 mb file => copied to all executors by HTTP protocol
+	=> new technique => using BITTORENT; 70% of internet traffic is bittorrent
+		20mb file=> roughly divided into 4mb chunks => distributed to executors
+		based on need; executors talk among themselves to get the needed data
+88. ACCUMULATORS:
+	=> just like counters in hadoop (usecase: read a file and count the lines; counter => how many german words?)
+	=> only a driver program can read accumulators values
+	=> spark UI can show the values of the accumulators; just like hadoop UI show counter values
+	=> val accum = sc.accumulator(0)
+		sc.parallelize(Array(1,2,3,4)).foreach(x => accum += x)
+		accum.value
+	NOTE: a whole chapter in learning spark book on BROADCAST variables and ACCUMULATORS, pls go through it for advanced cases.
+89. For Practice => data bricks cloud => 30 day trail
+90. Python API (4:31:10)
 
 
 
